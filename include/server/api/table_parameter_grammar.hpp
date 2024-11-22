@@ -81,10 +81,19 @@ struct TableParametersGrammar : public BaseParametersGrammar<Iterator, Signature
 
         annotations_list = annotations[qi::_val |= qi::_1] % ',';
 
-        base_rule = BaseGrammar::base_rule(qi::_r1) |
-                    (qi::lit("annotations=") >
-                     annotations_list[ph::bind(&engine::api::TableParameters::annotations,
-                                               qi::_r1) = qi::_1]);
+        using MappingType = engine::api::TableParameters::MappingType;
+        source_destination_mapping_type.add("one-to-one", MappingType::OneToOne)(
+            "many-to-many", MappingType::ManyToMany);
+
+        base_rule =
+            BaseGrammar::base_rule(qi::_r1) |
+            (qi::lit("annotations=") >
+             annotations_list[ph::bind(&engine::api::TableParameters::annotations, qi::_r1) =
+                                  qi::_1]) |
+            (qi::lit("source_destination_mapping=") >
+             source_destination_mapping_type
+                 [ph::bind(&engine::api::TableParameters::source_destination_mapping, qi::_r1) =
+                      qi::_1]);
     }
 
   protected:
@@ -99,8 +108,10 @@ struct TableParametersGrammar : public BaseParametersGrammar<Iterator, Signature
     qi::rule<Iterator, Signature> destinations_rule;
     qi::rule<Iterator, Signature> fallback_speed_rule;
     qi::rule<Iterator, Signature> scale_factor_rule;
+    qi::rule<Iterator, Signature> source_destination_mapping_rule;
     qi::rule<Iterator, std::size_t()> size_t_;
     qi::symbols<char, engine::api::TableParameters::AnnotationsType> annotations;
+    qi::symbols<char, engine::api::TableParameters::MappingType> source_destination_mapping_type;
     qi::rule<Iterator, engine::api::TableParameters::AnnotationsType()> annotations_list;
     qi::symbols<char, engine::api::TableParameters::FallbackCoordinateType>
         fallback_coordinate_type;

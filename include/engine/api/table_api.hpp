@@ -70,7 +70,10 @@ class TableAPI final : public BaseAPI
                  const std::vector<TableCellRef> &fallback_speed_cells,
                  flatbuffers::FlatBufferBuilder &fb_result) const
     {
-        auto number_of_sources = parameters.sources.size();
+        auto number_of_sources =
+            parameters.source_destination_mapping == api::TableParameters::MappingType::OneToOne
+                ? 1
+                : parameters.sources.size();
         auto number_of_destinations = parameters.destinations.size();
 
         auto data_timestamp = facade.GetTimestamp();
@@ -172,7 +175,10 @@ class TableAPI final : public BaseAPI
                  const std::vector<TableCellRef> &fallback_speed_cells,
                  util::json::Object &response) const
     {
-        auto number_of_sources = parameters.sources.size();
+        auto number_of_sources =
+            parameters.source_destination_mapping == api::TableParameters::MappingType::OneToOne
+                ? 1
+                : parameters.sources.size();
         auto number_of_destinations = parameters.destinations.size();
 
         // symmetric case
