@@ -75,8 +75,56 @@ Status TablePlugin::HandleRequest(const RoutingAlgorithmsInterface &algorithms,
     bool request_distance = params.annotations & api::TableParameters::AnnotationsType::Distance;
     bool request_duration = params.annotations & api::TableParameters::AnnotationsType::Duration;
 
-    auto result_tables_pair = algorithms.ManyToManySearch(
-        snapped_phantoms, params.sources, params.destinations, request_distance);
+    auto request_mapping_src_to_dst =
+        params.source_destination_mapping == api::TableParameters::MappingType::OneToOne
+            ? api::TableParameters::MappingType::OneToOne
+            : api::TableParameters::MappingType::ManyToMany;
+
+    if ((params.source_destination_mapping == api::TableParameters::MappingType::OneToOne &&
+         params.sources.size() <= 0) ||
+        params.destinations.size() <= 0)
+    {
+        return Error("SourceOrDestinationIndicesEmpty",
+                     "source and destination indices should not be empty for one to one mapping",
+                     result);
+    }
+    if (params.source_destination_mapping == api::TableParameters::MappingType::OneToOne &&
+        params.sources.size() != params.destinations.size())
+    {
+        return Error("UnequalSourceAndDestinationIndices",
+                     "source and destination indices should be equal in number",
+                     result);
+    }
+
+    std::pair<std::vector<EdgeDuration>, std::vector<EdgeDistance>> result_tables_pair;
+    if (request_mapping_src_to_dst == api::TableParameters::MappingType::OneToOne)
+    {
+        const auto number_of_entries = num_sources;
+        std::vector<EdgeDuration> durations_table(number_of_entries, MAXIMAL_EDGE_DURATION);
+        std::vector<EdgeDistance> distances_table(request_distance ? number_of_entries : 0,
+                                                  MAXIMAL_EDGE_DISTANCE);
+        for (std::size_t row = 0; row < num_sources; row++)
+        {
+            auto one_to_one_table_result = algorithms.ManyToManySearch(snapped_phantoms,
+                                                                       {params.sources[row]},
+                                                                       {params.destinations[row]},
+                                                                       request_distance);
+            if (row < number_of_entries)
+            {
+                durations_table[row] = one_to_one_table_result.first[0];
+                if (request_distance)
+                {
+                    distances_table[row] = one_to_one_table_result.second[0];
+                }
+            }
+        }
+        result_tables_pair = std::make_pair(durations_table, distances_table);
+    }
+    else
+    {
+        result_tables_pair = algorithms.ManyToManySearch(
+            snapped_phantoms, params.sources, params.destinations, request_distance);
+    }
 
     if ((request_duration && result_tables_pair.first.empty()) ||
         (request_distance && result_tables_pair.second.empty()))
@@ -92,9 +140,18 @@ Status TablePlugin::HandleRequest(const RoutingAlgorithmsInterface &algorithms,
     {
         for (std::size_t row = 0; row < num_sources; row++)
         {
-            for (std::size_t column = 0; column < num_destinations; column++)
+            auto start_index =
+                request_mapping_src_to_dst == api::TableParameters::MappingType::OneToOne ? row : 0;
+            auto end_index =
+                request_mapping_src_to_dst == api::TableParameters::MappingType::OneToOne
+                    ? row + 1
+                    : num_destinations;
+            for (std::size_t column = start_index; column < end_index; column++)
             {
-                const auto &table_index = row * num_destinations + column;
+                const auto &table_index =
+                    request_mapping_src_to_dst == api::TableParameters::MappingType::OneToOne
+                        ? row
+                        : row * num_destinations + column;
                 BOOST_ASSERT(table_index < result_tables_pair.first.size());
                 if (params.fallback_speed != from_alias<double>(INVALID_FALLBACK_SPEED) &&
                     params.fallback_speed > 0 &&
